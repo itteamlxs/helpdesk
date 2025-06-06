@@ -1,0 +1,8 @@
+#Ignorar las variables de acceso#
+    .env
+    schema.sql
+
+#Ignorar las carpetas innecesarias#
+    vendor
+    logs
+    tests
