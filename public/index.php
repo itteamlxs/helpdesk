@@ -4,20 +4,20 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-
 require_once __DIR__ . '/../config/env_loader.php';
 require_once __DIR__ . '/../config/session_start.php';
 require_once __DIR__ . '/../core/Database.php';
 require_once __DIR__ . '/../core/BaseController.php';
 
 spl_autoload_register(function ($clase) {
-    $clase = str_replace('\\', '/', $clase);
-    if (file_exists(__DIR__ . '/../' . $clase . '.php')) {
-        require_once __DIR__ . '/../' . $clase . '.php';
+    $rutaBase = __DIR__ . '/../';
+    $rutaClase = $rutaBase . str_replace(['\\', 'Controllers'], ['/', 'controllers'], $clase) . '.php';
+
+    if (file_exists($rutaClase)) {
+        require_once $rutaClase;
     }
 });
 
-// For deployment under a subdirectory like /helpdesk/, allow CORS for browser tests
 header('Access-Control-Allow-Origin: *');
 header('Content-Type: application/json');
 
@@ -36,7 +36,6 @@ $metodo = $_SERVER['REQUEST_METHOD'];
 switch ($ruta) {
     case 'usuarios':
         $controller = new UsersController();
-
         if ($metodo === 'GET') {
             if (isset($_GET['id'])) {
                 $controller->obtener((int) $_GET['id']);
@@ -60,9 +59,37 @@ switch ($ruta) {
         }
         break;
 
-    // Puedes añadir más casos aquí, según la lógica que ya tengas planteada para otras rutas.
-    
-    // Ejemplo para un caso de prueba de la conexión a la base de datos:
+    case 'tickets':
+        $controller = new TicketsController();
+        if ($metodo === 'GET') {
+            if (isset($_GET['id'])) {
+                $controller->obtener((int) $_GET['id']);
+            } else {
+                $controller->listar();
+            }
+        }
+        break;
+
+    case 'comments':
+        $controller = new CommentsController();
+        if (!isset($_GET['ticket_id'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ticket_id requerido']);
+            break;
+        }
+        $ticketId = (int) $_GET['ticket_id'];
+        if ($metodo === 'GET') {
+            $controller->list($ticketId);
+        }
+        break;
+
+    case 'sla':
+        $controller = new SLAController();
+        if ($metodo === 'GET') {
+            $controller->list();
+        }
+        break;
+
     case 'prueba-db':
         $db = Database::obtenerConexion();
         echo json_encode(['status' => 'ok', 'message' => 'Conexión a la base de datos establecida.']);
