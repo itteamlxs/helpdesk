@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Tickets - Helpdesk</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar-transition { transition: transform 0.3s ease-in-out; }
+        .content-blur { backdrop-filter: blur(8px); }
+        .ticket-card { 
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        .ticket-card:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .priority-urgente { border-left-color: #ef4444; }
+        .priority-alta { border-left-color: #f97316; }
+        .priority-media { border-left-color: #eab308; }
+        .priority-baja { border-left-color: #22c55e; }
+        
+        .status-abierto { background: #fef3c7; color: #92400e; }
+        .status-en_proceso { background: #dbeafe; color: #1e40af; }
+        .status-en_espera { background: #fce7f3; color: #be185d; }
+        .status-cerrado { background: #d1fae5; color: #065f46; }
+        
+        .animate-slide-down {
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="fixed inset-0 bg-white flex items-center justify-center z-50">
+        <div class="text-center">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p class="text-gray-600">Cargando sistema...</p>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed left-0 top-0 w-64 h-full bg-gradient-to-b from-blue-800 to-blue-900 text-white sidebar-transition z-40">
+        <div class="p-6 border-b border-blue-700">
+            <h1 class="text-xl font-bold flex items-center">
+                <i class="fas fa-headset mr-3"></i>
+                Helpdesk Pro
+            </h1>
+            <p class="text-blue-200 text-sm mt-1">Sistema de Tickets</p>
+        </div>
+        
+        <nav class="mt-6">
+            <a href="#" onclick="showView('dashboard')" class="nav-item flex items-center px-6 py-3 hover:bg-blue-700 transition-colors duration-200 border-l-4 border-transparent hover:border-blue-300">
+                <i class="fas fa-tachometer-alt mr-3"></i>
+                Dashboard
+            </a>
+            <a href="#" onclick="showView('tickets')" class="nav-item flex items-center px-6 py-3 hover:bg-blue-700 transition-colors duration-200 border-l-4 border-transparent hover:border-blue-300">
+                <i class="fas fa-ticket-alt mr-3"></i>
+                Tickets
+            </a>
+            <a href="#" onclick="showView('users')" class="nav-item flex items-center px-6 py-3 hover:bg-blue-700 transition-colors duration-200 border-l-4 border-transparent hover:border-blue-300">
+                <i class="fas fa-users mr-3"></i>
+                Usuarios
+            </a>
+            <a href="#" onclick="showView('reports')" class="nav-item flex items-center px-6 py-3 hover:bg-blue-700 transition-colors duration-200 border-l-4 border-transparent hover:border-blue-300">
+                <i class="fas fa-chart-bar mr-3"></i>
+                Reportes
+            </a>
+            <a href="#" onclick="showView('sla')" class="nav-item flex items-center px-6 py-3 hover:bg-blue-700 transition-colors duration-200 border-l-4 border-transparent hover:border-blue-300">
+                <i class="fas fa-clock mr-3"></i>
+                SLA
+            </a>
+            <a href="#" onclick="showView('audit')" class="nav-item flex items-center px-6 py-3 hover:bg-blue-700 transition-colors duration-200 border-l-4 border-transparent hover:border-blue-300">
+                <i class="fas fa-shield-alt mr-3"></i>
+                Auditoría
+            </a>
+            <a href="#" onclick="showView('settings')" class="nav-item flex items-center px-6 py-3 hover:bg-blue-700 transition-colors duration-200 border-l-4 border-transparent hover:border-blue-300">
+                <i class="fas fa-cog mr-3"></i>
+                Configuración
+            </a>
+        </nav>
+
+        <div class="absolute bottom-0 w-full p-6 border-t border-blue-700">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    <i class="fas fa-user text-sm"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium" id="userInfo">Usuario</p>
+                    <p class="text-xs text-blue-200">En línea</p>
+                </div>
+            </div>
+            <button onclick="logout()" class="mt-3 w-full bg-blue-600 hover:bg-blue-500 py-2 px-4 rounded transition-colors duration-200 text-sm">
+                <i class="fas fa-sign-out-alt mr-2"></i>Cerrar Sesión
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b border-gray-200 p-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 id="pageTitle" class="text-2xl font-semibold text-gray-800">Dashboard</h2>
+                    <p class="text-gray-600 text-sm mt-1">Bienvenido al sistema de gestión de tickets</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="showNotifications()" class="relative p-2 text-gray-600 hover:text-gray-800 transition-colors">
+                        <i class="fas fa-bell text-lg"></i>
+                        <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+                    </button>
+                    <button onclick="toggleSidebar()" class="md:hidden p-2 text-gray-600 hover:text-gray-800">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="p-6">
+            <!-- Dashboard View -->
+            <div id="dashboardView" class="view">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-600 text-sm">Total Tickets</p>
+                                <p class="text-3xl font-bold text-gray-800" id="totalTickets">0</p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-ticket-alt text-blue-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-600 text-sm">Abiertos</p>
+                                <p class="text-3xl font-bold text-orange-600" id="openTickets">0</p>
+                            </div>
+                            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-exclamation-circle text-orange-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-600 text-sm">En Proceso</p>
+                                <p class="text-3xl font-bold text-blue-600" id="inProgressTickets">0</p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-cogs text-blue-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-600 text-sm">Cerrados</p>
+                                <p class="text-3xl font-bold text-green-600" id="closedTickets">0</p>
+                            </div>
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                        <div class="p-6 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">Tickets Recientes</h3>
+                        </div>
+                        <div id="recentTickets" class="p-6">
+                            <!-- Se llena dinámicamente -->
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                        <div class="p-6 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">Prioridades</h3>
+                        </div>
+                        <div class="p-6">
+                            <canvas id="priorityChart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tickets View -->
+            <div id="ticketsView" class="view hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center space-x-4">
+                        <button onclick="showCreateTicketModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center">
+                            <i class="fas fa-plus mr-2"></i>Nuevo Ticket
+                        </button>
+                        <div class="flex items-center space-x-2">
+                            <select id="statusFilter" onchange="filterTickets()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option value="">Todos los estados</option>
+                                <option value="abierto">Abierto</option>
+                                <option value="en_proceso">En Proceso</option>
+                                <option value="en_espera">En Espera</option>
+                                <option value="cerrado">Cerrado</option>
+                            </select>
+                            <select id="priorityFilter" onchange="filterTickets()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option value="">Todas las prioridades</option>
+                                <option value="urgente">Urgente</option>
+                                <option value="alta">Alta</option>
+                                <option value="media">Media</option>
+                                <option value="baja">Baja</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="searchTickets" placeholder="Buscar tickets..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64">
+                        <button onclick="searchTickets()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="ticketsList" class="space-y-4">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Users View -->
+            <div id="usersView" class="view hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800">Gestión de Usuarios</h3>
+                    <button onclick="showCreateUserModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center">
+                        <i class="fas fa-user-plus mr-2"></i>Nuevo Usuario
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Correo</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rol</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTable" class="bg-white divide-y divide-gray-200">
+                                <!-- Se llena dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports View -->
+            <div id="reportsView" class="view hidden">
+                <h3 class="text-xl font-semibold text-gray-800 mb-6">Reportes y Estadísticas</h3>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h4 class="text-lg font-semibold mb-4">Tickets por Estado</h4>
+                        <canvas id="statusChart" width="400" height="300"></canvas>
+                    </div>
+                    
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h4 class="text-lg font-semibold mb-4">Rendimiento SLA</h4>
+                        <div id="slaStats" class="space-y-4">
+                            <!-- Se llena dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SLA View -->
+            <div id="slaView" class="view hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800">Configuración SLA</h3>
+                    <button onclick="updateSLA()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
+                        <i class="fas fa-save mr-2"></i>Guardar Cambios
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <div class="p-6">
+                        <div id="slaConfig" class="space-y-6">
+                            <!-- Se llena dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audit View -->
+            <div id="auditView" class="view hidden">
+                <h3 class="text-xl font-semibold text-gray-800 mb-6">Registro de Auditoría</h3>
+                
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditTable" class="bg-white divide-y divide-gray-200">
+                                <!-- Se llena dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="settingsView" class="view hidden">
+                <h3 class="text-xl font-semibold text-gray-800 mb-6">Configuración del Sistema</h3>
+                
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <div class="p-6">
+                        <form id="settingsForm" class="space-y-6">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Nombre de la Empresa</label>
+                                    <input type="text" id="nombreEmpresa" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Zona Horaria</label>
+                                    <select id="zonaHoraria" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                        <option value="UTC">UTC</option>
+                                        <option value="America/Argentina/Buenos_Aires">Buenos Aires</option>
+                                        <option value="America/Mexico_City">Ciudad de México</option>
+                                        <option value="America/Bogota">Bogotá</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Tiempo Max. Respuesta (min)</label>
+                                    <input type="number" id="tiempoMaxRespuesta" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Tiempo Cierre Tras Respuesta (min)</label>
+                                    <input type="number" id="tiempoCierreRespuesta" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                </div>
+                            </div>
+                            
+                            <div class="border-t border-gray-200 pt-6">
+                                <h4 class="text-lg font-medium text-gray-800 mb-4">Configuración SMTP</h4>
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Servidor SMTP</label>
+                                        <input type="text" id="smtpHost" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Usuario SMTP</label>
+                                        <input type="email" id="smtpUser" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña SMTP</label>
+                                        <input type="password" id="smtpPass" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="notificacionesEmail" class="mr-2">
+                                        <label class="text-sm text-gray-700">Habilitar notificaciones por email</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end">
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors duration-200">
+                                    <i class="fas fa-save mr-2"></i>Guardar Configuración
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <!-- Create Ticket Modal -->
+    <div id="createTicketModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 animate-slide-down">
+            <div class="p-6 border-b border-gray-200">
+                <h3 class="text-lg font-semibold">Crear Nuevo Ticket</h3>
+            </div>
+            <form id="createTicketForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Título</label>
+                    <input type="text" id="ticketTitulo" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
+                    <textarea id="ticketDescripcion" rows="4" required class="w-full border border-gray-300 rounded-lg px-3 py-2"></textarea>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Categoría</label>
+                        <select id="ticketCategoria" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                            <option value="">Seleccionar</option>
+                            <option value="Hardware">Hardware</option>
+                            <option value="Software">Software</option>
+                            <option value="Redes">Redes</option>
+                            <option value="Soporte">Soporte</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Prioridad</label>
+                        <select id="ticketPrioridad" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                            <option value="">Seleccionar</option>
+                            <option value="baja">Baja</option>
+                            <option value="media">Media</option>
+                            <option value="alta">Alta</option>
+                            <option value="urgente">Urgente</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
+                        <select id="ticketCliente" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                            <option value="">Seleccionar</option>
+                            <!-- Se llena dinámicamente -->
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeModal('createTicketModal')" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">Cancelar</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">Crear Ticket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div id="createUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 animate-slide-down">
+            <div class="p-6 border-b border-gray-200">
+                <h3 class="text-lg font-semibold">Crear Nuevo Usuario</h3>
+            </div>
+            <form id="createUserForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Nombre Completo</label>
+                    <input type="text" id="userName" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Correo Electrónico</label>
+                    <input type="email" id="userEmail" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                    <input type="password" id="userPassword" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Rol</label>
+                    <select id="userRole" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                        <option value="">Seleccionar</option>
+                        <option value="1">Cliente</option>
+                        <option value="2">Técnico</option>
+                        <option value="3">Administrador</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeModal('createUserModal')" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">Cancelar</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">Crear Usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Ticket Detail Modal -->
+    <div id="ticketDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto animate-slide-down">
+            <div class="p-6 border-b border-gray-200 sticky top-0 bg-white">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-semibold" id="ticketDetailTitle">Detalle del Ticket</h3>
+                    <button onclick="closeModal('ticketDetailModal')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="ticketDetailContent" class="p-6">
+                <!-- Se llena dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications -->
+    <div id="notifications" class="fixed top-4 right-4 space-y-2 z-50">
+        <!-- Las notificaciones se añaden dinámicamente aquí -->
+    </div>
+
+    <script>
+        // Estado global de la aplicación
+        let currentUser = null;
+        let tickets = [];
+        let users = [];
+        let slaConfig = [];
+        let settings = {};
+        let auditLogs = [];
+
+        // API Base URL - Ajusta según tu configuración
+        const API_BASE = '/public/index.php';
+
+        // Inicializar aplicación
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                document.getElementById('loadingScreen').style.display = 'none';
+                initApp();
+            }, 1000);
+        });
+
+        async function initApp() {
+            try {
+                await loadInitialData();
+                showView('dashboard');
+                updateDashboard();
+            } catch (error) {
+                console.error('Error inicializando aplicación:', error);
+                showNotification('Error al cargar la aplicación', 'error');
+            }
+        }
+
+        // Funciones de API
+        async function apiCall(endpoint, options = {}) {
+            const url = `${API_BASE}?ruta=${endpoint}`;
+            const defaultOptions = {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            };
+
+            try {
+                const response = await fetch(url, { ...defaultOptions, ...options });
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Error en la petición');
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        // Cargar datos iniciales
+        async function loadInitialData() {
+            try {
+                const [ticketsData, usersData, slaData] = await Promise.all([
+                    apiCall('tickets'),
+                    apiCall('usuarios'),
+                    apiCall('sla')
+                ]);
+
+                tickets = ticketsData || [];
+                users = usersData || [];
+                slaConfig = slaData || [];
+
+                // Cargar configuración
+                try {
+                    settings = await apiCall('configuracion');
+                } catch (error) {
+                    settings = {};
+                }
+
+                // Cargar auditoría
+                try {
+                    auditLogs = await apiCall('auditoria');
+                } catch (error) {
+                    auditLogs = [];
+                }
+
+            } catch (error) {
+                console.error('Error cargando datos iniciales:', error);
+            }
+        }
+
+        // Gestión de vistas
+        function showView(viewName) {
+            // Ocultar todas las vistas
+            document.querySelectorAll('.view').forEach(view => {
+                view.classList.add('hidden');
+            });
+
+            // Mostrar vista seleccionada
+            document.getElementById(viewName + 'View').classList.remove('hidden');
+
+            // Actualizar título
+            const titles = {
+                dashboard: 'Dashboard',
+                tickets: 'Gestión de Tickets',
+                users: 'Gestión de Usuarios',
+                reports: 'Reportes y Estadísticas',
+                sla: 'Configuración SLA',
+                audit: 'Registro de Auditoría',
+                settings: 'Configuración del Sistema'
+            };
+
+            document.getElementById('pageTitle').textContent = titles[viewName] || 'Sistema';
+
+            // Actualizar navegación activa
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('bg-blue-700', 'border-blue-300');
+            });
+
+            // Cargar datos específicos de la vista
+            switch(viewName) {
+                case 'dashboard':
+                    updateDashboard();
+                    break;
+                case 'tickets':
+                    renderTickets();
+                    break;
+                case 'users':
+                    renderUsers();
+                    break;
+                case 'reports':
+                    renderReports();
+                    break;
+                case 'sla':
+                    renderSLA();
+                    break;
+                case 'audit':
+                    renderAudit();
+                    break;
+                case 'settings':
+                    renderSettings();
+                    break;
+            }
+        }
+
+        // Dashboard
+        function updateDashboard() {
+            const stats = calculateStats();
+            
+            document.getElementById('totalTickets').textContent = stats.total;
+            document.getElementById('openTickets').textContent = stats.abiertos;
+            document.getElementById('inProgressTickets').textContent = stats.enProceso;
+            document.getElementById('closedTickets').textContent = stats.cerrados;
+
+            renderRecentTickets();
+            renderPriorityChart();
+        }
+
+        function calculateStats() {
+            return {
+                total: tickets.length,
+                abiertos: tickets.filter(t => t.estado === 'abierto').length,
+                enProceso: tickets.filter(t => t.estado === 'en_proceso').length,
+                cerrados: tickets.filter(t => t.estado === 'cerrado').length
+            };
+        }
+
+        function renderRecentTickets() {
+            const recentTickets = tickets.slice(0, 5);
+            const container = document.getElementById('recentTickets');
+            
+            if (recentTickets.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">No hay tickets recientes</p>';
+                return;
+            }
+
+            container.innerHTML = recentTickets.map(ticket => `
+                <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                    <div class="flex-1">
+                        <h4 class="font-medium text-gray-800 text-sm">${ticket.titulo}</h4>
+                        <p class="text-xs text-gray-500">${ticket.cliente}</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-1 text-xs rounded-full status-${ticket.estado}">${ticket.estado}</span>
+                        <span class="px-2 py-1 text-xs rounded-full priority-${ticket.prioridad}">${ticket.prioridad}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderPriorityChart() {
+            const canvas = document.getElementById('priorityChart');
+            const ctx = canvas.getContext('2d');
+            
+            // Limpiar canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const priorities = {
+                urgente: tickets.filter(t => t.prioridad === 'urgente').length,
+                alta: tickets.filter(t => t.prioridad === 'alta').length,
+                media: tickets.filter(t => t.prioridad === 'media').length,
+                baja: tickets.filter(t => t.prioridad === 'baja').length
+            };
+
+            const colors = {
+                urgente: '#ef4444',
+                alta: '#f97316',
+                media: '#eab308',
+                baja: '#22c55e'
+            };
+
+            const total = Object.values(priorities).reduce((a, b) => a + b, 0);
+            if (total === 0) {
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('No hay datos', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            let currentAngle = 0;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY) - 20;
+
+            Object.entries(priorities).forEach(([priority, count]) => {
+                if (count > 0) {
+                    const sliceAngle = (count / total) * 2 * Math.PI;
+                    
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+                    ctx.lineTo(centerX, centerY);
+                    ctx.fillStyle = colors[priority];
+                    ctx.fill();
+                    
+                    currentAngle += sliceAngle;
+                }
+            });
+
+            // Leyenda
+            let legendY = 20;
+            Object.entries(priorities).forEach(([priority, count]) => {
+                if (count > 0) {
+                    ctx.fillStyle = colors[priority];
+                    ctx.fillRect(10, legendY, 12, 12);
+                    ctx.fillStyle = '#374151';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`${priority}: ${count}`, 25, legendY + 9);
+                    legendY += 20;
+                }
+            });
+        }
+
+        // Gestión de Tickets
+        function renderTickets() {
+            const container = document.getElementById('ticketsList');
+            
+            if (tickets.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fas fa-ticket-alt text-gray-300 text-6xl mb-4"></i>
+                        <h3 class="text-lg font-medium text-gray-700 mb-2">No hay tickets</h3>
+                        <p class="text-gray-500">Crea tu primer ticket para comenzar</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = tickets.map(ticket => `
+                <div class="ticket-card bg-white rounded-xl shadow-sm border border-gray-200 p-6 priority-${ticket.prioridad}">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-3 mb-2">
+                                <h3 class="text-lg font-semibold text-gray-800">#${ticket.id} - ${ticket.titulo}</h3>
+                                <span class="px-2 py-1 text-xs rounded-full status-${ticket.estado}">${ticket.estado}</span>
+                                <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600">${ticket.prioridad}</span>
+                            </div>
+                            <p class="text-gray-600 mb-3">${ticket.descripcion ? ticket.descripcion.substring(0, 100) + '...' : ''}</p>
+                            <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                <span><i class="fas fa-user mr-1"></i>${ticket.cliente || 'Sin asignar'}</span>
+                                <span><i class="fas fa-tag mr-1"></i>${ticket.categoria || 'Sin categoría'}</span>
+                                <span><i class="fas fa-calendar mr-1"></i>${new Date(ticket.creado_en).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="viewTicketDetail(${ticket.id})" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button onclick="editTicket(${ticket.id})" class="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <div class="relative group">
+                                <button class="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <div class="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 hidden group-hover:block z-10">
+                                    <button onclick="changeTicketStatus(${ticket.id}, 'en_proceso')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">En Proceso</button>
+                                    <button onclick="changeTicketStatus(${ticket.id}, 'en_espera')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">En Espera</button>
+                                    <button onclick="changeTicketStatus(${ticket.id}, 'cerrado')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Cerrar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterTickets() {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const priorityFilter = document.getElementById('priorityFilter').value;
+            
+            let filteredTickets = tickets;
+            
+            if (statusFilter) {
+                filteredTickets = filteredTickets.filter(t => t.estado === statusFilter);
+            }
+            
+            if (priorityFilter) {
+                filteredTickets = filteredTickets.filter(t => t.prioridad === priorityFilter);
+            }
+            
+            renderFilteredTickets(filteredTickets);
+        }
+
+        function renderFilteredTickets(filteredTickets) {
+            const container = document.getElementById('ticketsList');
+            // Similar a renderTickets pero con filteredTickets
+            container.innerHTML = filteredTickets.map(ticket => `
+                <div class="ticket-card bg-white rounded-xl shadow-sm border border-gray-200 p-6 priority-${ticket.prioridad}">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-3 mb-2">
+                                <h3 class="text-lg font-semibold text-gray-800">#${ticket.id} - ${ticket.titulo}</h3>
+                                <span class="px-2 py-1 text-xs rounded-full status-${ticket.estado}">${ticket.estado}</span>
+                                <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600">${ticket.prioridad}</span>
+                            </div>
+                            <p class="text-gray-600 mb-3">${ticket.descripcion ? ticket.descripcion.substring(0, 100) + '...' : ''}</p>
+                            <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                <span><i class="fas fa-user mr-1"></i>${ticket.cliente || 'Sin asignar'}</span>
+                                <span><i class="fas fa-tag mr-1"></i>${ticket.categoria || 'Sin categoría'}</span>
+                                <span><i class="fas fa-calendar mr-1"></i>${new Date(ticket.creado_en).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="viewTicketDetail(${ticket.id})" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button onclick="editTicket(${ticket.id})" class="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Gestión de Usuarios
+        function renderUsers() {
+            const container = document.getElementById('usersTable');
+            
+            if (users.length === 0) {
+                container.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                            <i class="fas fa-users text-4xl mb-4 block"></i>
+                            No hay usuarios registrados
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            container.innerHTML = users.map(user => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                <i class="fas fa-user text-blue-600 text-sm"></i>
+                            </div>
+                            <div>
+                                <div class="text-sm font-medium text-gray-900">${user.nombre}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.correo}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">${user.rol}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 text-xs rounded-full ${user.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${user.activo ? 'Activo' : 'Inactivo'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button onclick="editUser(${user.id})" class="text-blue-600 hover:text-blue-900 mr-3">Editar</button>
+                        <button onclick="deleteUser(${user.id})" class="text-red-600 hover:text-red-900">Eliminar</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // SLA Configuration
+        function renderSLA() {
+            const container = document.getElementById('slaConfig');
+            
+            container.innerHTML = slaConfig.map(sla => `
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-4 border border-gray-200 rounded-lg">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Prioridad</label>
+                        <input type="text" value="${sla.prioridad}" disabled class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tiempo Respuesta (min)</label>
+                        <input type="number" id="respuesta_${sla.prioridad}" value="${sla.tiempo_respuesta}" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tiempo Resolución (min)</label>
+                        <input type="number" id="resolucion_${sla.prioridad}" value="${sla.tiempo_resolucion}" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <p>Respuesta: ${Math.floor(sla.tiempo_respuesta / 60)}h ${sla.tiempo_respuesta % 60}m</p>
+                        <p>Resolución: ${Math.floor(sla.tiempo_resolucion / 60)}h ${sla.tiempo_resolucion % 60}m</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Auditoría
+        function renderAudit() {
+            const container = document.getElementById('auditTable');
+            
+            if (auditLogs.length === 0) {
+                container.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="px-6 py-12 text-center text-gray-500">
+                            <i class="fas fa-shield-alt text-4xl mb-4 block"></i>
+                            No hay registros de auditoría
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            container.innerHTML = auditLogs.map(log => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${new Date(log.creado_en).toLocaleString()}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${log.usuario || 'Sistema'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${log.accion}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${log.ip}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Configuración
+        function renderSettings() {
+            if (settings && Object.keys(settings).length > 0) {
+                document.getElementById('nombreEmpresa').value = settings.nombre_empresa || '';
+                document.getElementById('zonaHoraria').value = settings.zona_horaria || 'UTC';
+                document.getElementById('tiempoMaxRespuesta').value = settings.tiempo_max_respuesta || 60;
+                document.getElementById('tiempoCierreRespuesta').value = settings.tiempo_cierre_tras_respuesta || 1440;
+                document.getElementById('smtpHost').value = settings.smtp_host || '';
+                document.getElementById('smtpUser').value = settings.smtp_user || '';
+                document.getElementById('smtpPass').value = settings.smtp_pass || '';
+                document.getElementById('notificacionesEmail').checked = settings.notificaciones_email || false;
+            }
+        }
+
+        // Funciones de Modal
+        function showCreateTicketModal() {
+            // Llenar select de clientes
+            const clienteSelect = document.getElementById('ticketCliente');
+            clienteSelect.innerHTML = '<option value="">Seleccionar</option>' + 
+                users.filter(u => u.rol === 'cliente').map(u => 
+                    `<option value="${u.id}">${u.nombre}</option>`
+                ).join('');
+            
+            document.getElementById('createTicketModal').classList.remove('hidden');
+            document.getElementById('createTicketModal').classList.add('flex');
+        }
+
+        function showCreateUserModal() {
+            document.getElementById('createUserModal').classList.remove('hidden');
+            document.getElementById('createUserModal').classList.add('flex');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+            document.getElementById(modalId).classList.remove('flex');
+        }
+
+        // Event Listeners para formularios
+        document.getElementById('createTicketForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                titulo: document.getElementById('ticketTitulo').value,
+                descripcion: document.getElementById('ticketDescripcion').value,
+                categoria: document.getElementById('ticketCategoria').value,
+                prioridad: document.getElementById('ticketPrioridad').value,
+                cliente_id: document.getElementById('ticketCliente').value
+            };
+
+            try {
+                await apiCall('tickets', {
+                    method: 'POST',
+                    body: JSON.stringify(formData)
+                });
+                
+                showNotification('Ticket creado exitosamente', 'success');
+                closeModal('createTicketModal');
+                await loadInitialData();
+                renderTickets();
+                updateDashboard();
+                
+                // Limpiar formulario
+                this.reset();
+            } catch (error) {
+                showNotification('Error al crear ticket: ' + error.message, 'error');
+            }
+        });
+
+        document.getElementById('createUserForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                nombre: document.getElementById('userName').value,
+                correo: document.getElementById('userEmail').value,
+                password: document.getElementById('userPassword').value,
+                rol_id: document.getElementById('userRole').value
+            };
+
+            try {
+                await apiCall('usuarios', {
+                    method: 'POST',
+                    body: JSON.stringify(formData)
+                });
+                
+                showNotification('Usuario creado exitosamente', 'success');
+                closeModal('createUserModal');
+                await loadInitialData();
+                renderUsers();
+                
+                // Limpiar formulario
+                this.reset();
+            } catch (error) {
+                showNotification('Error al crear usuario: ' + error.message, 'error');
+            }
+        });
+
+        document.getElementById('settingsForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                nombre_empresa: document.getElementById('nombreEmpresa').value,
+                zona_horaria: document.getElementById('zonaHoraria').value,
+                tiempo_max_respuesta: document.getElementById('tiempoMaxRespuesta').value,
+                tiempo_cierre_tras_respuesta: document.getElementById('tiempoCierreRespuesta').value,
+                smtp_host: document.getElementById('smtpHost').value,
+                smtp_user: document.getElementById('smtpUser').value,
+                smtp_pass: document.getElementById('smtpPass').value,
+                notificaciones_email: document.getElementById('notificacionesEmail').checked
+            };
+
+            try {
+                await apiCall('configuracion', {
+                    method: 'POST',
+                    body: JSON.stringify(formData)
+                });
+                
+                showNotification('Configuración guardada exitosamente', 'success');
+                await loadInitialData();
+            } catch (error) {
+                showNotification('Error al guardar configuración: ' + error.message, 'error');
+            }
+        });
+
+        // Funciones auxiliares
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `p-4 rounded-lg shadow-lg border max-w-sm animate-slide-down ${
+                type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+                type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+                'bg-blue-50 border-blue-200 text-blue-800'
+            }`;
+            
+            notification.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium">${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-3 text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('notifications').appendChild(notification);
+            
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('-translate-x-full');
+        }
+
+        async function updateSLA() {
+            const valores = slaConfig.map(sla => ({
+                prioridad: sla.prioridad,
+                tiempo_respuesta: document.getElementById(`respuesta_${sla.prioridad}`).value,
+                tiempo_resolucion: document.getElementById(`resolucion_${sla.prioridad}`).value
+            }));
+
+            try {
+                await apiCall('sla', {
+                    method: 'PUT',
+                    body: JSON.stringify({ valores })
+                });
+                
+                showNotification('Configuración SLA actualizada', 'success');
+                await loadInitialData();
+                renderSLA();
+            } catch (error) {
+                showNotification('Error al actualizar SLA: ' + error.message, 'error');
+            }
+        }
+
+        async function viewTicketDetail(ticketId) {
+            try {
+                const ticket = await apiCall(`tickets&id=${ticketId}`);
+                const comments = await apiCall(`comments&ticket_id=${ticketId}`);
+                
+                document.getElementById('ticketDetailTitle').textContent = `Ticket #${ticket.id} - ${ticket.titulo}`;
+                
+                document.getElementById('ticketDetailContent').innerHTML = `
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div>
+                            <h4 class="font-semibold text-gray-800 mb-3">Información del Ticket</h4>
+                            <div class="space-y-3">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Estado:</span>
+                                    <span class="px-2 py-1 text-xs rounded-full status-${ticket.estado}">${ticket.estado}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Prioridad:</span>
+                                    <span class="px-2 py-1 text-xs rounded-full bg-gray-100">${ticket.prioridad}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Categoría:</span>
+                                    <span>${ticket.categoria}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Creado:</span>
+                                    <span>${new Date(ticket.creado_en).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-gray-800 mb-3">Descripción</h4>
+                            <p class="text-gray-600 bg-gray-50 p-3 rounded-lg">${ticket.descripcion}</p>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-3">Comentarios</h4>
+                        <div class="space-y-3 max-h-64 overflow-y-auto">
+                            ${comments.length === 0 ? 
+                                '<p class="text-gray-500 text-center py-4">No hay comentarios</p>' :
+                                comments.map(comment => `
+                                    <div class="bg-gray-50 p-3 rounded-lg">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium text-sm">${comment.autor}</span>
+                                            <span class="text-xs text-gray-500">${new Date(comment.creado_en).toLocaleString()}</span>
+                                        </div>
+                                        <p class="text-gray-700 text-sm">${comment.contenido}</p>
+                                        ${comment.interno ? '<span class="inline-block mt-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">Interno</span>' : ''}
+                                    </div>
+                                `).join('')
+                            }
+                        </div>
+                        
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <textarea id="newComment" placeholder="Agregar comentario..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows="3"></textarea>
+                            <div class="flex justify-between items-center mt-2">
+                                <label class="flex items-center text-sm">
+                                    <input type="checkbox" id="comentarioInterno" class="mr-2">
+                                    Comentario interno
+                                </label>
+                                <button onclick="addComment(${ticket.id})" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                                    Agregar Comentario
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('ticketDetailModal').classList.remove('hidden');
+                document.getElementById('ticketDetailModal').classList.add('flex');
+                
+            } catch (error) {
+                showNotification('Error al cargar detalles del ticket: ' + error.message, 'error');
+            }
+        }
+
+        async function addComment(ticketId) {
+            const contenido = document.getElementById('newComment').value.trim();
+            if (!contenido) {
+                showNotification('El comentario no puede estar vacío', 'error');
+                return;
+            }
+
+            const interno = document.getElementById('comentarioInterno').checked;
+
+            try {
+                await apiCall(`comments&ticket_id=${ticketId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        usuario_id: 1, // Usar ID del usuario actual
+                        contenido: contenido,
+                        interno: interno
+                    })
+                });
+
+                showNotification('Comentario agregado', 'success');
+                viewTicketDetail(ticketId); // Recargar modal
+                
+            } catch (error) {
+                showNotification('Error al agregar comentario: ' + error.message, 'error');
+            }
+        }
+
+        async function changeTicketStatus(ticketId, newStatus) {
+            try {
+                await apiCall(`tickets&id=${ticketId}`, {
+                    method: 'PUT',
+                    body: `estado=${newStatus}`,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                });
+
+                showNotification(`Ticket actualizado a ${newStatus}`, 'success');
+                await loadInitialData();
+                renderTickets();
+                updateDashboard();
+                
+            } catch (error) {
+                showNotification('Error al actualizar ticket: ' + error.message, 'error');
+            }
+        }
+
+        async function editTicket(ticketId) {
+            // Implementar modal de edición
+            showNotification('Función de edición en desarrollo', 'info');
+        }
+
+        async function editUser(userId) {
+            // Implementar modal de edición de usuario
+            showNotification('Función de edición en desarrollo', 'info');
+        }
+
+        async function deleteUser(userId) {
+            if (!confirm('¿Está seguro de que desea eliminar este usuario?')) {
+                return;
+            }
+
+            try {
+                await apiCall(`usuarios&id=${userId}`, {
+                    method: 'DELETE'
+                });
+
+                showNotification('Usuario eliminado', 'success');
+                await loadInitialData();
+                renderUsers();
+                
+            } catch (error) {
+                showNotification('Error al eliminar usuario: ' + error.message, 'error');
+            }
+        }
+
+        function renderReports() {
+            // Renderizar gráfico de estados
+            renderStatusChart();
+            renderSLAStats();
+        }
+
+        function renderStatusChart() {
+            const canvas = document.getElementById('statusChart');
+            const ctx = canvas.getContext('2d');
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const states = {
+                abierto: tickets.filter(t => t.estado === 'abierto').length,
+                en_proceso: tickets.filter(t => t.estado === 'en_proceso').length,
+                en_espera: tickets.filter(t => t.estado === 'en_espera').length,
+                cerrado: tickets.filter(t => t.estado === 'cerrado').length
+            };
+
+            const colors = {
+                abierto: '#f59e0b',
+                en_proceso: '#3b82f6',
+                en_espera: '#ec4899',
+                cerrado: '#10b981'
+            };
+
+            const total = Object.values(states).reduce((a, b) => a + b, 0);
+            if (total === 0) {
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('No hay datos', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            // Crear gráfico de barras
+            const barWidth = 60;
+            const barSpacing = 80;
+            const startX = 50;
+            const maxHeight = canvas.height - 80;
+
+            Object.entries(states).forEach(([state, count], index) => {
+                const barHeight = (count / Math.max(...Object.values(states))) * maxHeight;
+                const x = startX + (index * barSpacing);
+                const y = canvas.height - 40 - barHeight;
+
+                // Dibujar barra
+                ctx.fillStyle = colors[state];
+                ctx.fillRect(x, y, barWidth, barHeight);
+
+                // Dibujar valor
+                ctx.fillStyle = '#374151';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(count, x + barWidth/2, y - 5);
+
+                // Dibujar etiqueta
+                ctx.fillText(state.replace('_', ' '), x + barWidth/2, canvas.height - 20);
+            });
+        }
+
+        function renderSLAStats() {
+            const container = document.getElementById('slaStats');
+            
+            const slaCompliance = slaConfig.map(sla => {
+                const relevantTickets = tickets.filter(t => t.prioridad === sla.prioridad);
+                const onTimeTickets = relevantTickets.length; // Simplificado - necesitaría lógica de tiempo real
+                const compliance = relevantTickets.length > 0 ? (onTimeTickets / relevantTickets.length) * 100 : 100;
+                
+                return {
+                    prioridad: sla.prioridad,
+                    compliance: compliance,
+                    total: relevantTickets.length
+                };
+            });
+
+            container.innerHTML = slaCompliance.map(stat => `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                        <p class="font-medium text-gray-800">${stat.prioridad}</p>
+                        <p class="text-sm text-gray-600">${stat.total} tickets</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-lg font-bold ${stat.compliance >= 90 ? 'text-green-600' : stat.compliance >= 70 ? 'text-yellow-600' : 'text-red-600'}">
+                            ${stat.compliance.toFixed(1)}%
+                        </p>
+                        <p class="text-xs text-gray-500">Cumplimiento</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function searchTickets() {
+            const searchTerm = document.getElementById('searchTickets').value.toLowerCase();
+            const filteredTickets = tickets.filter(ticket => 
+                ticket.titulo.toLowerCase().includes(searchTerm) ||
+                ticket.descripcion.toLowerCase().includes(searchTerm) ||
+                ticket.cliente.toLowerCase().includes(searchTerm)
+            );
+            renderFilteredTickets(filteredTickets);
+        }
+
+        function showNotifications() {
+            // Mostrar panel de notificaciones
+            showNotification('Panel de notificaciones en desarrollo', 'info');
+        }
+
+        function logout() {
+            if (confirm('¿Está seguro de que desea cerrar sesión?')) {
+                // Limpiar datos de sesión
+                currentUser = null;
+                showNotification('Sesión cerrada', 'success');
+                // Redirigir a login si existe
+                window.location.reload();
+            }
+        }
+
+        // Manejo de teclas de acceso rápido
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + N para nuevo ticket
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                e.preventDefault();
+                showCreateTicketModal();
+            }
+            
+            // Escape para cerrar modales
+            if (e.key === 'Escape') {
+                const modals = document.querySelectorAll('[id$="Modal"]');
+                modals.forEach(modal => {
+                    if (!modal.classList.contains('hidden')) {
+                        closeModal(modal.id);
+                    }
+                });
+            }
+        });
+
+        // Actualización automática cada 30 segundos
+        setInterval(async () => {
+            try {
+                await loadInitialData();
+                // Solo actualizar vista actual sin interrumpir al usuario
+                const currentView = document.querySelector('.view:not(.hidden)');
+                if (currentView && currentView.id === 'dashboardView') {
+                    updateDashboard();
+                }
+            } catch (error) {
+                console.error('Error en actualización automática:', error);
+            }
+        }, 30000);
+
+        // Manejo responsive
+        window.addEventListener('resize', function() {
+            if (window.innerWidth >= 768) {
+                document.getElementById('sidebar').classList.remove('-translate-x-full');
+            }
+        });
+
+        // Simulación de datos si no hay conexión a la API
+        function loadMockData() {
+            tickets = [
+                {
+                    id: 1,
+                    titulo: "Problema con el servidor",
+                    descripcion: "El servidor principal no responde desde esta mañana",
+                    categoria: "Hardware",
+                    prioridad: "alta",
+                    estado: "abierto",
+                    cliente: "Juan Pérez",
+                    creado_en: "2025-06-07T10:30:00Z"
+                },
+                {
+                    id: 2,
+                    titulo: "Error en aplicación",
+                    descripcion: "La aplicación se cierra inesperadamente",
+                    categoria: "Software",
+                    prioridad: "media",
+                    estado: "en_proceso",
+                    cliente: "María García",
+                    creado_en: "2025-06-07T09:15:00Z"
+                }
+            ];
+
+            users = [
+                {
+                    id: 1,
+                    nombre: "Juan Pérez",
+                    correo: "juan@empresa.com",
+                    rol: "cliente",
+                    activo: true
+                },
+                {
+                    id: 2,
+                    nombre: "Ana López",
+                    correo: "ana@empresa.com",
+                    rol: "tecnico",
+                    activo: true
+                }
+            ];
+
+            slaConfig = [
+                {
+                    prioridad: "urgente",
+                    tiempo_respuesta: 60,
+                    tiempo_resolucion: 240
+                },
+                {
+                    prioridad: "alta",
+                    tiempo_respuesta: 240,
+                    tiempo_resolucion: 720
+                },
+                {
+                    prioridad: "media",
+                    tiempo_respuesta: 720,
+                    tiempo_resolucion: 1440
+                },
+                {
+                    prioridad: "baja",
+                    tiempo_respuesta: 1440,
+                    tiempo_resolucion: 2880
+                }
+            ];
+
+            auditLogs = [
+                {
+                    id: 1,
+                    usuario: "Admin",
+                    accion: "login",
+                    ip: "192.168.1.100",
+                    creado_en: "2025-06-07T08:00:00Z"
+                }
+            ];
+
+            settings = {
+                nombre_empresa: "Mi Empresa S.A.",
+                zona_horaria: "America/Argentina/Buenos_Aires",
+                tiempo_max_respuesta: 60,
+                tiempo_cierre_tras_respuesta: 1440,
+                smtp_host: "smtp.empresa.com",
+                smtp_user: "soporte@empresa.com",
+                notificaciones_email: true
+            };
+        }
+
+        // Verificar si la API está disponible
+        async function checkApiConnection() {
+            try {
+                await apiCall('prueba-db');
+                return true;
+            } catch (error) {
+                console.warn('API no disponible, usando datos de prueba');
+                loadMockData();
+                return false;
+            }
+        }
+
+        // Inicializar con verificación de API
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(async () => {
+                document.getElementById('loadingScreen').style.display = 'none';
+                
+                const apiAvailable = await checkApiConnection();
+                if (apiAvailable) {
+                    await loadInitialData();
+                }
+                
+                showView('dashboard');
+                updateDashboard();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
